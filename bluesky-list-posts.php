@@ -18,6 +18,11 @@ $fetch_username = 'kenda.fi';
 
 $curl = curl_init();
 
+$postdata = array(
+	'identifier' => $config[ 'bluesky-username' ],
+	'password' => $config[ 'bluesky-password' ]
+);
+
 curl_setopt_array(
 	$curl,
 	array(
@@ -30,10 +35,7 @@ curl_setopt_array(
 		CURLOPT_TIMEOUT => 0,
 		CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
 		CURLOPT_CUSTOMREQUEST => 'POST',
-		CURLOPT_POSTFIELDS => '{
-			"identifier":"' . $config['bluesky-username'] . '",
-			"password":"' . $config['bluesky-password'] . '"
-		}',
+		CURLOPT_POSTFIELDS => json_encode( $postdata ),
 		CURLOPT_HTTPHEADER => array(
 			'Content-Type: application/json'
 		),
@@ -52,7 +54,7 @@ if ( is_array( $session ) && !empty( $session ) && array_key_exists( 'accessJwt'
 	// may be less than specified here. If the user replies or re-posts a lot,
 	// you may need to increase this value to have enough to display.
 	// Default is 50, but we want to specify this ourself. Allowed: 1-100.
-	$fetch_amount = 20;
+	$fetch_amount = 50;
 
 	$curl = curl_init();
 
@@ -70,7 +72,7 @@ if ( is_array( $session ) && !empty( $session ) && array_key_exists( 'accessJwt'
 			CURLOPT_CUSTOMREQUEST => 'GET',
 			CURLOPT_HTTPHEADER => array(
 				'Content-Type: application/json',
-				'Authorization: Bearer ' . $session['accessJwt']
+				'Authorization: Bearer ' . $session[ 'accessJwt' ]
 			),
 		)
 	);
@@ -94,6 +96,8 @@ if ( is_array( $session ) && !empty( $session ) && array_key_exists( 'accessJwt'
 
 	if( is_array( $data ) && !empty( $data ) && array_key_exists( 'feed', $data ) ) {
 
+		echo '<div class="bsky-wrapper">';
+
 		foreach( $data['feed'] as $bsky_post ) {
 
 			// Original post does not have $bsky_post['reply'].
@@ -103,8 +107,6 @@ if ( is_array( $session ) && !empty( $session ) && array_key_exists( 'accessJwt'
 			// the original post is in 'reply', and the reply is in 'post'.
 
 			if( !array_key_exists( 'reply', $bsky_post ) ) {
-
-				echo '<div class="bsky-wrapper">';
 
 				// By comparing username whose feed we fetched and the post username,
 				// we can exclude all re-posts of someone elses post.
@@ -118,7 +120,7 @@ if ( is_array( $session ) && !empty( $session ) && array_key_exists( 'accessJwt'
 						echo '<div class="bsky-user-and-created"><p>';
 
 							// Avatar
-							echo '<img src="' . $bsky_post['post']['author']['avatar'] . '" alt="" width="40" align="left">';
+							echo '<img src="' . $bsky_post['post']['author']['avatar'] . '" alt="" width="60" hspace="10"align="left">';
 
 							// Username
 							echo '<a href="https://bsky.app/profile/'.$bsky_post['post']['author']['handle'].'" target="_blank">' . htmlentities( $bsky_post['post']['author']['displayName'] ) . '</a><br>';
@@ -127,32 +129,164 @@ if ( is_array( $session ) && !empty( $session ) && array_key_exists( 'accessJwt'
 							$link_parts = explode( 'app.bsky.feed.post/', $bsky_post['post']['uri'] );
 
 							// Timestamp incl. link to post.
-							echo '<a href="https://bsky.app/profile/' . $bsky_post['post']['author']['handle'] . '/post/' . $link_parts[ 1 ] . '" target="_blank">' . date( $date_time_format, strtotime( $bsky_post['post']['record']['createdAt'] ) ) . '</a>';
+							echo '<small><a href="https://bsky.app/profile/' . $bsky_post['post']['author']['handle'] . '/post/' . $link_parts[ 1 ] . '" target="_blank">' . date( $date_time_format, strtotime( $bsky_post['post']['record']['createdAt'] ) ) . '</a></small>';
 
 						echo '</p></div> <!--bsky-user-and-created -->';
 
-						echo '<div class="bsky-item-text"><p>';
+						echo '<div class="bsky-item-text">';
 
-							// The content
+						echo '<p>';
+
+						// The content
+
+						if( array_key_exists( 'record', $bsky_post['post'] ) && array_key_exists( 'facets', $bsky_post['post']['record'] ) ) {
+
+							// We seem to have links. Let's make them clickable in the content.
+
+							$replace = array();
+
+							foreach( $bsky_post['post']['record']['facets'] as $link ) {
+
+								if( array_key_exists( 'features', $link ) && is_array( $link['features'] ) && !empty( $link['features'] ) ) {
+
+									if( array_key_exists( 'uri', $link['features'][0] ) ) {
+
+										$uri = $link['features'][0]['uri'];
+
+										$length = $link['index']['byteEnd'] - $link['index']['byteStart'];
+
+										$replace_this = substr( $bsky_post['post']['record']['text'], $link['index']['byteStart'], $length );
+
+										$replace[ $replace_this ] = '<a href="' . $uri . '" target="_blank">' . $replace_this . '</a>';
+
+									}
+
+								}
+
+							}
+
+							echo nl2br( str_replace( array_keys( $replace ), $replace, $bsky_post['post']['record']['text'] ), false );
+
+						}
+						else {
+
+							// We have no rich content. Output as plain text.
 							echo nl2br( $bsky_post['post']['record']['text'], false );
 
-							/*
-
-							TODO:
-
-							if post includes links we could list them somehow
-							$bsky_post['post']['record']['facets'] array
-							$bsky_post['post']['record']['facets'][x][features] array
-							$bsky_post['post']['record']['facets'][x][features][x]['$type'] == 'app.bsky.richtext.facet#link'
-							$bsky_post['post']['record']['facets'][x][features][x][uri]
-
-							*/
+						}
 
 						echo '</p>';
 
 						// Embeds
 
 						if( array_key_exists( 'embed', $bsky_post['post'] ) ) {
+
+							// Quoted post
+
+							if( array_key_exists( '$type', $bsky_post['post']['embed'] ) && $bsky_post['post']['embed']['$type'] == 'app.bsky.embed.recordWithMedia#view' ) {
+
+								// We have both images and quoted post
+
+
+
+
+							}
+							elseif( array_key_exists( 'record', $bsky_post['post']['embed'] ) ) {
+
+								// Quoted post only
+
+								if( $bsky_post['post']['embed']['record']['$type'] == 'app.bsky.embed.record#viewRecord' ) {
+
+									echo '<div class="bsky-embeds-record"><blockquote>';
+
+									// Avatar
+									echo '<img src="' . $bsky_post['post']['embed']['record']['author']['avatar'] . '" alt="" width="60" hspace="10" align="left">';
+
+									// Username
+									echo '<a href="https://bsky.app/profile/'.$bsky_post['post']['embed']['record']['author']['handle'].'" target="_blank">' . htmlentities( $bsky_post['post']['embed']['record']['author']['displayName'] ) . '</a><br>';
+
+									// We need post ID for the link... This is very ugly.
+									$link_parts = explode( 'app.bsky.feed.post/', $bsky_post['post']['embed']['record']['uri'] );
+
+									// Timestamp incl. link to post.
+									echo '<small><a href="https://bsky.app/profile/' . $bsky_post['post']['embed']['record']['author']['handle'] . '/post/' . $link_parts[ 1 ] . '" target="_blank">' . date( $date_time_format, strtotime( $bsky_post['post']['embed']['record']['value']['createdAt'] ) ) . '</a></small>';
+
+									echo '<div class="bsky-item-embed-text"><p>';
+
+										// The content
+
+										if( array_key_exists( 'record', $bsky_post['post'] ) && array_key_exists( 'facets', $bsky_post['post']['record'] ) ) {
+
+											// We seem to have links. Let's make them clickable in the content.
+
+											$replace = array();
+
+											foreach( $bsky_post['post']['record']['facets'] as $link ) {
+
+												if( array_key_exists( 'features', $link ) && is_array( $link['features'] ) && !empty( $link['features'] ) ) {
+
+													if( $link['features'][0]['$type'] == 'app.bsky.richtext.facet#tag' ) {
+
+														// Hashtag - TODO when this is officially supported
+
+													}
+													elseif( $link['features'][0]['$type'] == 'app.bsky.richtext.facet#link' ) {
+
+															// Link
+
+														$uri = $link['features'][0]['uri'];
+
+														$length = $link['index']['byteEnd'] - $link['index']['byteStart'];
+
+														$replace_this = substr( $bsky_post['post']['record']['text'], $link['index']['byteStart'], $length );
+
+														$replace[ $replace_this ] = '<a href="' . $uri . '" target="_blank">' . $replace_this . '</a>';
+
+													}
+
+												}
+
+											}
+
+											echo nl2br( str_replace( array_keys( $replace ), $replace, $bsky_post['post']['record']['text'] ), false );
+
+										}
+										else {
+
+											// We have no rich content. Output as plain text.
+											echo nl2br( $bsky_post['post']['record']['text'], false );
+
+										}
+
+									echo '</div> <!--bsky-item-embed-text -->';
+
+									echo '</blockquote></div> <!-- bsky-embeds-record -->';
+
+								}
+
+							}
+
+							// External link
+
+							if( array_key_exists( 'external', $bsky_post['post']['embed'] ) ) {
+
+								if( $bsky_post['post']['embed']['$type'] == 'app.bsky.embed.external#view' ) {
+
+									echo '<div class="bsky-embeds-external"><blockquote>';
+
+									// Thumbnail
+									echo '<img src="' . $bsky_post['post']['embed']['external']['thumb'] . '" alt="" width="40" hspace="10" align="left">';
+
+									echo '<a href="'.$bsky_post['post']['embed']['external']['uri'].'" target="_blank">';
+									echo '<strong>' . htmlentities( $bsky_post['post']['embed']['external']['title'] ) . '</strong><br>';
+									echo htmlentities( $bsky_post['post']['embed']['external']['description'] );
+									echo '</a><br>';
+
+									echo '</blockquote></div> <!-- bsky-embeds-external -->';
+
+								}
+
+							}
 
 							// Images
 
@@ -192,8 +326,6 @@ if ( is_array( $session ) && !empty( $session ) && array_key_exists( 'accessJwt'
 
 				}
 
-				echo '</div> <!-- bsky-wrapper -->';
-
 			}
 
 			if( $display_loop == $display_limit ) {
@@ -204,6 +336,8 @@ if ( is_array( $session ) && !empty( $session ) && array_key_exists( 'accessJwt'
 			}
 
 		}
+
+		echo '</div> <!-- bsky-wrapper -->';
 
 	}
 
