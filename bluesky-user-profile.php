@@ -18,6 +18,11 @@ $fetch_username = 'kenda.fi';
 
 $curl = curl_init();
 
+$postdata = array(
+	'identifier' => $config[ 'bluesky-username' ],
+	'password' => $config[ 'bluesky-password' ]
+);
+
 curl_setopt_array(
 	$curl,
 	array(
@@ -30,10 +35,7 @@ curl_setopt_array(
 		CURLOPT_TIMEOUT => 0,
 		CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
 		CURLOPT_CUSTOMREQUEST => 'POST',
-		CURLOPT_POSTFIELDS => '{
-			"identifier":"' . $config['bluesky-username'] . '",
-			"password":"' . $config['bluesky-password'] . '"
-		}',
+		CURLOPT_POSTFIELDS => json_encode( $postdata ),
 		CURLOPT_HTTPHEADER => array(
 			'Content-Type: application/json'
 		),
