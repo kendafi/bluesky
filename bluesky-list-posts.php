@@ -254,7 +254,7 @@ if ( is_array( $session ) && !empty( $session ) && array_key_exists( 'accessJwt'
 										else {
 
 											// We have no rich content. Output as plain text.
-											echo nl2br( $bsky_post['post']['record']['text'], false );
+											echo nl2br( $bsky_post['post']['embed']['record']['value']['text'], false );
 
 										}
 
