@@ -3,68 +3,32 @@
 /*
  * Post to your Bluesky profile
  *
- * Create your app password here and add it to $config below.
- * https://bsky.app/settings/app-passwords
- *
  * Load this file in your browser. Be careful - it posts on every reload.
+ *
+ * Documentation
+ * https://docs.bsky.app/docs/api/com-atproto-repo-upload-blob
+ * https://docs.bsky.app/docs/api/com-atproto-repo-create-record
  *
  */
 
-// Comment out the following row to actually send text to Bluesky.
-die( 'This file dies here to protect from accidentally posting anything.' );
+$text = 'This is a test post sent via Bluesky AT Protocol XRPC API. This message will soon be deleted.';
+// Cheers @kenda.fi for the code ;)
 
-$config = array(
-	'bluesky-username' => 'USERNAME.bsky.social',
-	'bluesky-password' => 'xxxx-xxxx-xxxx-xxxx'
-);
+// Which languages the post contains. Max 3 (for more Bluesky gives and error)
+//$langs = array( 'fi' );
+//$langs = array( 'sv', 'sv-FI', 'sv-SE' );
+$langs = array( 'en-GB', 'en-US' );
 
-$text = 'This is a test post via XRPC that will soon be deleted. Cheers @kenda.fi for the code ;) Here is a link: https://kenda.fi/';
+include 'config.php';
+include 'common-functions.php';
 
-// TODO: we should remove unwanted characters from $text
+$bluesky_session = bluesky_open_session();
 
-function debug( $str ) {
+// Remove unwanted characters that may mess up the sent data.
 
-	echo htmlentities( $str ) . '<br>';
+$unwanted = array( '{', '}', '[', ']', '"' );
 
-}
-
-$curl = curl_init();
-
-$postdata = array(
-	'identifier' => $config[ 'bluesky-username' ],
-	'password' => $config[ 'bluesky-password' ]
-);
-
-curl_setopt_array(
-	$curl,
-	array(
-		CURLOPT_URL => 'https://bsky.social/xrpc/com.atproto.server.createSession',
-		CURLOPT_RETURNTRANSFER => true,
-		CURLOPT_ENCODING => '',
-		CURLOPT_FOLLOWLOCATION => true,
-		CURLOPT_MAXREDIRS => 10,
-		CURLOPT_TIMEOUT => 30,
-		CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-		CURLOPT_CUSTOMREQUEST => 'POST',
-		CURLOPT_POSTFIELDS => json_encode( $postdata ),
-		CURLOPT_HTTPHEADER => array(
-			'Content-Type: application/json'
-		),
-	)
-);
-
-if( $_SERVER['HTTP_HOST'] == 'localhost' ) {
-
-	// skip SSL in localhost in case it doesn't support that
-	curl_setopt( $curl, CURLOPT_SSL_VERIFYPEER, 0 );
-
-}
-
-$response = curl_exec( $curl );
-
-curl_close( $curl );
-
-$session = json_decode( $response, TRUE );
+$text = str_replace( $unwanted, '', $text );
 
 // Parse $text to see if we find links and user handles that should be mentioned separately.
 // Not perhaps the best way, but $text should be quite short so this should be quick
@@ -75,8 +39,6 @@ $embed = '';
 $explode = explode( ' ', $text );
 
 foreach( $explode as $str ) {
-
-	//debug( 'We have string ' . $str );
 
 	$str = trim( $str );
 
@@ -102,9 +64,6 @@ foreach( $explode as $str ) {
 
 			$str = trim( mb_substr( $str, 0, -$strlen ) );
 
-			//debug( 'Removed: '.$last );
-			//debug( 'New str: ' . $str );
-
 		}
 
 	}
@@ -112,8 +71,7 @@ foreach( $explode as $str ) {
 	if( filter_var( $str, FILTER_VALIDATE_URL ) ) {
 
 		// URL
-
-    debug( $str . ' is a valid URL! Adding to data...' );
+    // $str is a valid URL! Adding to data...
 
 		$byteStart = strpos( $text, $str );
 		$byteEnd = $byteStart + strlen( $str );
@@ -131,16 +89,13 @@ foreach( $explode as $str ) {
       ]
     }';
 
-		debug( 'Done.' );
-
 		// That should have taken care of the clickable link.
 		// Now we will make it an embed.
 		// Lets do that only if there is not yet a link embed.
 
 		if( $embed == '' ) {
 
-			debug( 'Adding link also as embed...' );
-
+			// Adding link also as embed...
 			// ...if we can fetch all required data.
 
 			$title = '';
@@ -170,19 +125,13 @@ foreach( $explode as $str ) {
 
 					$title = $content;
 
-					debug( 'We have title: ' . $title );
-
 				}
 				elseif( $property == 'og:description' ) {
 
 					$description = $content;
 
-					debug( 'We have description: ' . $description );
-
 				}
 				elseif( $property == 'og:image' ) {
-
-					debug( 'We have thumbnail: ' . $content );
 
 					$headers = get_headers( str_replace( ' ', '%20', $content ) );
 
@@ -194,55 +143,19 @@ foreach( $explode as $str ) {
 
 							$thumb_mime = str_replace('content-type: ', '', $header );
 
-							debug( 'We have image mime type: ' . $thumb_mime );
-
-							// Fetch image and upload to Bluesky
-
-							debug( 'Trying to fetch image content...' );
+							// Fetch image content and upload to Bluesky
 
 							$img_data = file_get_contents( str_replace( ' ', '%20', $content ) );
 
-							$curl = curl_init();
-
 							if( $img_data != '' ) {
 
-								// Save a local version to see if it really contains image data (debug)
+								// Uncomment following line to save a local version to see if it really contains image data (debug)
 								// file_put_contents( time() . '.jpg', $img_data );
-								// It works! (view the file manually)
+								// That works! (view the file manually)
 
-								curl_setopt_array(
-									$curl,
-									array(
-										CURLOPT_URL => 'https://bsky.social/xrpc/com.atproto.repo.uploadBlob',
-										CURLOPT_RETURNTRANSFER => true,
-										CURLOPT_ENCODING => '',
-										CURLOPT_FOLLOWLOCATION => true,
-										CURLOPT_MAXREDIRS => 10,
-										CURLOPT_TIMEOUT => 30,
-										CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-										CURLOPT_CUSTOMREQUEST => 'POST',
-										CURLOPT_POSTFIELDS => $img_data,
-										CURLOPT_HTTPHEADER => array(
-											'Content-Type: ' . $thumb_mime,
-											'Authorization: Bearer ' . $session['accessJwt']
-										),
-									)
-								);
+								$api_endpoint = BLUESKY_API_ENDPOINT_AUTH . 'com.atproto.repo.uploadBlob';
 
-								if( $_SERVER['HTTP_HOST'] == 'localhost' ) {
-
-									// skip SSL in localhost in case it doesn't support that
-									curl_setopt( $curl, CURLOPT_SSL_VERIFYPEER, 0 );
-
-								}
-
-								$response = curl_exec( $curl );
-
-								curl_close( $curl );
-
-								$response_array = json_decode( $response, true );
-
-								echo '<pre>'; print_r( $response_array ); echo '</pre>';
+								$response_array = bluesky_fetch_data( $api_endpoint, 'POST', $img_data, $bluesky_session );
 
 								if( is_array( $response_array ) && array_key_exists( 'blob', $response_array ) ) {
 
@@ -254,9 +167,9 @@ foreach( $explode as $str ) {
 											$thumb_mime = $response_array['blob']['mimeType'];
 											$thumb_size = $response_array['blob']['size'];
 
-											debug( 'We have image link returned from Bluesky: ' . $thumb_link );
-											debug( 'We have verified image size: ' . $thumb_mime );
-											debug( 'We have verified image size: ' . $thumb_size );
+											// We have image link returned from Bluesky: $thumb_link
+											// We have verified image size: $thumb_mime
+											// We have verified image size: $thumb_size
 
 										}
 
@@ -267,20 +180,11 @@ foreach( $explode as $str ) {
 							}
 							else {
 
-								debug( 'Image data is EMPTY!' );
+								// Image data is EMPTY!
 
 							}
 
 						}
-						/*
-						elseif( strstr( $header, 'content-length: ' ) ) {
-
-							$thumb_size = str_replace('content-length: ', '', $header );
-
-							debug( 'We have image size: ' . $thumb_size );
-
-						}
-						*/
 
 					}
 
@@ -290,7 +194,7 @@ foreach( $explode as $str ) {
 
 			if( $title != '' && $description != '' ) {
 
-				debug( 'Great success! We HAVE data to add link as an embed...' );
+				// We HAVE data to add link as an embed.
 
 				$embed = '
         "embed": {
@@ -302,7 +206,7 @@ foreach( $explode as $str ) {
 
 				if( $thumb_link != '' && $thumb_mime != '' && $thumb_size != '' ) {
 
-					debug( 'We ALSO have data to add thumbnail in the embed...' );
+					// We ALSO have data to add thumbnail in the embed.
 
 					$embed .= ',
             "thumb": {
@@ -317,7 +221,7 @@ foreach( $explode as $str ) {
 				}
 				else {
 
-					debug( '...but we do NOT have data to add thumbnail in the embed.' );
+					// but we do NOT have data to add thumbnail in the embed.
 
 				}
 
@@ -325,70 +229,35 @@ foreach( $explode as $str ) {
           }
         }';
 
-				debug( 'Done.' );
+				// Done.
 
 			}
 			else {
 
-				debug( 'Fail. We do NOT have data to add link as an embed.' );
+				// Fail. We do NOT have data to add link as an embed.
 
 			}
 
 		}
 
-		debug( '' ); // results in only <br>, trying to make output more readable
-
 	}
 	elseif( substr( $str, 0, 1 ) == '@' && preg_match( '/^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/', str_replace( '@', '', $str ) ) ) {
 
-		// User handle
+		// User handle found in content
 		// https://atproto.com/specs/handle
 
-		debug( 'User handle FOUND! ' . $str );
+		// Trying to fetch DID.
 
-		// We need to get user DID value.
+		$api_endpoint = BLUESKY_API_ENDPOINT_AUTH . 'app.bsky.actor.getProfile?actor=' . str_replace( '@', '', $str );
 
-		debug( 'Trying to fetch DID.' );
-
-		$curl = curl_init();
-
-		curl_setopt_array(
-			$curl,
-			array(
-				CURLOPT_URL => 'https://bsky.social/xrpc/app.bsky.actor.getProfile?actor=' . str_replace( '@', '', $str ),
-				CURLOPT_RETURNTRANSFER => true,
-				CURLOPT_ENCODING => '',
-				CURLOPT_FOLLOWLOCATION => true,
-				CURLOPT_MAXREDIRS => 10,
-				CURLOPT_TIMEOUT => 30,
-				CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-				CURLOPT_CUSTOMREQUEST => 'GET',
-				CURLOPT_HTTPHEADER => array(
-					'Content-Type: application/json',
-					'Authorization: Bearer ' . $session['accessJwt']
-				),
-			)
-		);
-
-		if( $_SERVER['HTTP_HOST'] == 'localhost' ) {
-
-			// skip SSL in localhost in case it doesn't support that
-			curl_setopt( $curl, CURLOPT_SSL_VERIFYPEER, 0 );
-
-		}
-
-		$response = curl_exec( $curl );
-
-		$data = json_decode( $response, TRUE );
-
-		echo '<pre>'; print_r( $data ); echo '</pre>';
+		$data = bluesky_fetch_data( $api_endpoint, 'GET', array(), $bluesky_session );
 
 		if( array_key_exists( 'did', $data ) ) {
 
-			debug( 'User DID FOUND: ' . $data[ 'did' ] );
-			debug( 'User displayName: ' . $data[ 'displayName' ] );
-			debug( 'User description: ' . $data[ 'description' ] );
-			debug( 'Adding to $postdata...' );
+			// User DID FOUND: $data[ 'did' ]
+			// User displayName: $data[ 'displayName' ]
+			// User description: $data[ 'description' ]
+			// Adding to $postdata...' );
 
 			$byteStart = strpos( $text, $str );
 			$byteEnd = $byteStart + strlen( $str );
@@ -406,16 +275,12 @@ foreach( $explode as $str ) {
         ]
       }';
 
-			debug( 'Done.' );
-
 		}
 		else {
 
-			debug( 'We have no DID. User handle NOT added to $postdata.' );
+			// We have no DID. User handle NOT added to $postdata.
 
 		}
-
-		debug( '' ); // results in only <br>, trying to make output more readable
 
 	}
 
@@ -424,12 +289,12 @@ foreach( $explode as $str ) {
 }
 
 $postdata = '{
-  "repo": "'.$session[ 'did' ].'",
+  "repo": "'.$bluesky_session[ 'did' ].'",
   "collection": "app.bsky.feed.post",
   "record": {
     "$type": "app.bsky.feed.post",
     "text": "' . $text . '",
-		"langs": [ "sv-FI", "sv-SE" ],
+		"langs": [ "' . implode( '", "', $langs ) . '" ],
     "createdAt": "' . date( 'c' ) . '"';
 
 	if( !empty( $facets ) ) {
@@ -455,69 +320,38 @@ $postdata .= '
   }
 }';
 
-debug( 'This is the whole array that we will send:' );
+// This is the whole array that we will send:
+// echo '<pre>' . $postdata . '</pre>';
 
-echo '<pre>' . $postdata . '</pre>';
+// Posting to Bluesky!
 
-debug( 'Posting to Bluesky...' );
+$api_endpoint = BLUESKY_API_ENDPOINT_AUTH . 'com.atproto.repo.createRecord';
 
-$curl = curl_init();
-
-curl_setopt_array(
-	$curl,
-	array(
-		CURLOPT_URL => 'https://bsky.social/xrpc/com.atproto.repo.createRecord',
-		CURLOPT_RETURNTRANSFER => true,
-		CURLOPT_ENCODING => '',
-		CURLOPT_FOLLOWLOCATION => true,
-		CURLOPT_MAXREDIRS => 10,
-		CURLOPT_TIMEOUT => 30,
-		CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-		CURLOPT_CUSTOMREQUEST => 'POST',
-		CURLOPT_POSTFIELDS => $postdata,
-		CURLOPT_HTTPHEADER => array(
-			'Content-Type: application/json',
-			'Authorization: Bearer ' . $session['accessJwt']
-		),
-	)
-);
-
-if( $_SERVER['HTTP_HOST'] == 'localhost' ) {
-
-	// skip SSL in localhost in case it doesn't support that
-	curl_setopt( $curl, CURLOPT_SSL_VERIFYPEER, 0 );
-
-}
-
-$response = curl_exec( $curl );
-
-curl_close( $curl );
-
-$response = json_decode( $response, TRUE );
+$response = bluesky_fetch_data( $api_endpoint, 'POST', json_decode( $postdata ), $bluesky_session );
 
 if( is_array( $response ) ) {
 
 	if( array_key_exists( 'uri', $response ) ) {
 
-		echo '<span style="color:white;background:green;">';
-		debug( 'Great success!' );
-		echo '</span>';
+		echo '<span style="color:white;background:green;">
+		Great success!
+		</span>';
 
 		echo '<pre>'; print_r( $response ); echo '</pre>';
 
 	}
 	elseif( array_key_exists( 'error', $response ) ) {
 
-		echo '<span style="color:white;background:red;">';
-		debug( 'We have an error: ' . $response['message'] );
-		echo '</span>';
+		echo '<span style="color:white;background:red;">
+		We have an error: ' . $response['message'] . '
+		</span>';
 
 	}
 	else {
 
-		echo '<span style="color:white;background:red;">';
-		debug( 'Not sure what happened...' );
-		echo '</span>';
+		echo '<span style="color:white;background:red;">
+		Not sure what happened...
+		</span>';
 
 		echo '<pre>'; print_r( $response ); echo '</pre>';
 
@@ -526,11 +360,13 @@ if( is_array( $response ) ) {
 }
 else {
 
-	echo '<span style="color:white;background:red;">';
-	debug( 'We did not receive a JSON?' );
-	echo '</span>';
+	echo '<span style="color:white;background:red;">
+	We did not receive a JSON?
+	</span>';
 
-	echo '<pre>'; print_r( $response ); echo '</pre>';
+	echo '<p>Trying to output as is: ' . $response . '</p>';
+
+	echo '<pre>print_r: '; print_r( $response ); echo '</pre>';
 
 }
 
@@ -538,11 +374,5 @@ else {
 // {"uri":"at://did:plc:53p7ljvdslyob4yee4l7ukr2/app.bsky.feed.post/3kch4xqry342m","cid":"bafyreibcldcgupnwpgvfoi47zsjuli2jiidbnmbswvgpwtdmchkpfnb3te"}
 // Failed post:
 // {"error":"InvalidRequest","message":"Input must have the property \"repo\""}
-
-debug( 'Done.' );
-
-debug( '' ); // results in only <br>, trying to make output more readable
-
-debug( 'End.' );
 
 ?>
