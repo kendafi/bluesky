@@ -11,8 +11,7 @@
  *
  */
 
-$text = 'This is a test post sent via Bluesky AT Protocol XRPC API. This message will soon be deleted.';
-// Cheers @kenda.fi for the code ;)
+$text = 'This is a test post sent via Bluesky AT Protocol XRPC API. This message will soon be deleted. Cheers @kenda.fi for the code ;)';
 
 // Which languages the post contains. Max 3 (for more Bluesky gives and error)
 //$langs = array( 'fi' );
