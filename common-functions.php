@@ -300,7 +300,7 @@ function bluesky_author_and_datetime( $bluesky_author_and_datetime, $postlink = 
 }
 
 /*
- * Open a session for those requests that require auth.
+ * Return posts HTML.
  *
  **/
 
@@ -546,18 +546,49 @@ function bluesky_posts_html( $api_endpoint, $api_method = 'GET', $postdata = arr
 			elseif ( $item_array[ 'embed' ][ '$type' ] == 'app.bsky.embed.video#view' ) {
 
 				// Video
-				// We only display preview image of video until Bluesky implements videos in API data.
 
 				if ( array_key_exists( 'thumbnail', $item_array[ 'embed' ] ) ) {
 
-					$html .= '<div class="bsky-embeds-images"><p>';
+					$html .= '<div class="bsky-embeds-images">';
 
 					$thumbnail = $item_array[ 'embed' ][ 'thumbnail' ];
 					$alt = ( array_key_exists( 'alt', $item_array[ 'embed' ] ) ? $item_array[ 'embed' ][ 'alt' ] : '' );
 
-					$html .= '<a href="' . $postlink . '" target="_blank"><img src="' . $thumbnail . '" alt="' . $alt . '" title="Click to see video" width="100%"></a>';
+					// Image only that links to original post.
+					// If you want to keep your page fast you may want to use this
+					// instead of all the code below that also requires a heavy JavaScript library.
 
-					$html .= '</p></div> <!-- bsky-embeds-images -->';
+					// $html .= '<a href="' . $postlink . '" target="_blank"><img src="' . $thumbnail . '" alt="' . $alt . '" title="Click to see video" width="100%"></a></video>';
+
+					// Video playlist embed
+					// Includes script for playlist support for <video>.
+					// Make sure to include the library. Get it here: https://www.jsdelivr.com/package/npm/hls.js
+
+					$video_id = stripcslashes( strip_tags( $item_array[ 'embed' ][ 'cid' ] ) );
+
+					$html .= '<video id="video_' . $video_id . '" controls width="100%" poster="' . $thumbnail . '" aria-label="' . $alt . '"></video>
+					<script>
+					const video_' . $video_id . ' = document.getElementById("video_' . $video_id . '");
+					const playlistUrl_' . $video_id . ' = "' . $item_array[ 'embed' ][ 'playlist' ] . '";
+					if (Hls.isSupported()) {
+						const hls_' . $video_id . ' = new Hls();
+						hls_' . $video_id . '.loadSource(playlistUrl_' . $video_id . ');
+						hls_' . $video_id . '.attachMedia(video_' . $video_id . ');
+						hls_' . $video_id . '.on(Hls.Events.MANIFEST_PARSED, function () {
+							//video_' . $video_id . '.play(); // autoplay
+						});
+					} else if (video_' . $video_id . '.canPlayType("application/vnd.apple.mpegurl")) {
+						// Safari and some iOS devices support it natively
+						video_' . $video_id . '.src = playlistUrl_' . $video_id . ';
+						video_' . $video_id . '.addEventListener("loadedmetadata", function () {
+							//video_' . $video_id . '.play(); // autoplay
+						});
+					} else {
+						video_' . $video_id . '.outerHTML = "Your browser does not support HLS playback.";
+					}
+					</script>';
+
+					$html .= '</div> <!-- bsky-embeds-images -->';
 
 				}
 

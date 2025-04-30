@@ -6,6 +6,9 @@
  * Documentation
  * https://docs.bsky.app/docs/api/app-bsky-feed-get-author-feed
  *
+ * For videos to work you need to include hls.js (see readme file)
+ * echo '<script src="hls.min.js"></script>';
+ *
  */
 
 // The user whose posts you want to display.
